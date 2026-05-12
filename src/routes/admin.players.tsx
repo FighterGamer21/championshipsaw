@@ -9,7 +9,8 @@ import { toast } from "sonner";
 import { Download, Search, Trash2 } from "lucide-react";
 import { downloadCSV } from "@/lib/csv";
 import { PLAYER_STATUSES, STATUS_STYLES, type PlayerStatus } from "@/lib/event";
-import { adminErrorMessage, requireRow } from "@/lib/admin-db";
+import { adminErrorMessage } from "@/lib/admin-db";
+import { adminRpc, setPlayerStatusArgs } from "@/lib/admin-rpc";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
@@ -55,20 +56,7 @@ function PlayersPage() {
 
   const setStatus = async (p: Player, status: PlayerStatus, extra: Partial<Player> = {}) => {
     try {
-      const update: Partial<Player> = { status, ...extra };
-      if (status === "CHECKED_IN" && !p.checked_in_at) update.checked_in_at = new Date().toISOString();
-      const { data, error } = await supabase.from("players").update(update).eq("id", p.id).select("*").maybeSingle();
-      if (error) throw error;
-      const updated = requireRow(data as Player | null, "Player status update");
-
-      if (status === "ELIMINATED" || status === "DISQUALIFIED") {
-        const { data: elimination, error: eliminationError } = await supabase.from("eliminations").insert({
-          player_id: p.id, day: updated.current_day || 1, round_name: updated.current_round ?? "Unknown", reason: status === "DISQUALIFIED" ? "Disqualified" : "Eliminated",
-        }).select("id").maybeSingle();
-        if (eliminationError) throw eliminationError;
-        requireRow(elimination, "Elimination history insert");
-      }
-
+      const updated = await adminRpc<Player>("admin_set_player_status", setPlayerStatusArgs(p.id, status, extra));
       setPlayers((list) => list.map((row) => (row.id === updated.id ? updated : row)));
       toast.success(`${p.ign} -> ${status}`);
       load();
@@ -79,9 +67,7 @@ function PlayersPage() {
 
   const delPlayer = async (p: Player) => {
     try {
-      const { data, error } = await supabase.from("players").delete().eq("id", p.id).select("id").maybeSingle();
-      if (error) throw error;
-      requireRow(data, "Player delete");
+      await adminRpc<string>("admin_delete_player", { _player_id: p.id });
       toast.success(`Deleted ${p.ign}`);
       load();
     } catch (error) {
@@ -91,12 +77,7 @@ function PlayersPage() {
 
   const banPlayer = async (p: Player) => {
     try {
-      const { data: ban, error } = await supabase.from("bans").insert({ ign: p.ign, discord_username: p.discord_username || null, reason: "Banned by admin", banned_until: null }).select("id").maybeSingle();
-      if (error) throw error;
-      requireRow(ban, "Ban insert");
-      const { data: updated, error: playerError } = await supabase.from("players").update({ status: "BANNED" }).eq("id", p.id).select("*").maybeSingle();
-      if (playerError) throw playerError;
-      requireRow(updated, "Player ban status update");
+      await adminRpc<Player>("admin_ban_player", { _player_id: p.id });
       toast.success(`${p.ign} banned`);
       load();
     } catch (error) {

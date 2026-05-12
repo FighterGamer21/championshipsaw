@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { Play, Square, Crown } from "lucide-react";
 import { ROUNDS, DAY_TITLES } from "@/lib/event";
-import { adminErrorMessage, requireRow, requireRows } from "@/lib/admin-db";
+import { adminErrorMessage } from "@/lib/admin-db";
+import { adminRpc } from "@/lib/admin-rpc";
 
 export const Route = createFileRoute("/admin/rounds")({
   component: RoundsAdmin,
@@ -33,18 +34,7 @@ function RoundsAdmin() {
 
   const startRound = async (day: number, name: string) => {
     try {
-      const existing = findRound(name);
-      const now = new Date().toISOString();
-      const { data: round, error: roundError } = existing
-        ? await supabase.from("rounds").update({ status: "active", started_at: now, ended_at: null }).eq("id", existing.id).select("*").maybeSingle()
-        : await supabase.from("rounds").insert({ day, round_name: name, status: "active", started_at: now }).select("*").maybeSingle();
-      if (roundError) throw roundError;
-      requireRow(round, "Round start");
-      const { data: settings, error: settingsError } = await supabase.from("settings").update({ current_day: day, current_round: name, event_status: "live" }).eq("id", 1).select("id").maybeSingle();
-      if (settingsError) throw settingsError;
-      requireRow(settings, "Event settings update");
-      const { error: playersError } = await supabase.from("players").update({ current_day: day, current_round: name }).in("status", ["CHECKED_IN", "ALIVE", "QUALIFIED", "SEMI_FINALIST", "FINALIST", "TOP_3"]);
-      if (playersError) throw playersError;
+      await adminRpc<Round>("admin_start_round", { _day: day, _round_name: name });
       toast.success(`Started: ${name}`);
       load();
     } catch (error) {
@@ -54,12 +44,7 @@ function RoundsAdmin() {
 
   const endRound = async (name: string) => {
     try {
-      const existing = findRound(name);
-      if (!existing) throw new Error("Round has not been started yet.");
-      const now = new Date().toISOString();
-      const { data, error } = await supabase.from("rounds").update({ status: "completed", ended_at: now }).eq("id", existing.id).select("*").maybeSingle();
-      if (error) throw error;
-      requireRow(data, "Round end");
+      await adminRpc<Round>("admin_end_round", { _round_name: name });
       toast.success(`Ended: ${name}`);
       load();
     } catch (error) {
@@ -69,14 +54,7 @@ function RoundsAdmin() {
 
   const selectTop3 = async () => {
     try {
-      const { data: alive, error: loadError } = await supabase.from("players").select("id,ign").in("status", ["ALIVE", "QUALIFIED", "FINALIST"]);
-      if (loadError) throw loadError;
-      if (!alive || alive.length < 3) return toast.error("Need at least 3 alive players to select Top 3");
-      const top3 = alive.slice(0, 3);
-      const ids = top3.map((p) => p.id);
-      const { data, error } = await supabase.from("players").update({ status: "TOP_3" }).in("id", ids).select("id");
-      if (error) throw error;
-      requireRows(data, "Top 3 update");
+      const top3 = await adminRpc<{ ign: string }[]>("admin_select_top3");
       toast.success(`Top 3 selected: ${top3.map((p) => p.ign).join(", ")}`);
     } catch (error) {
       toast.error(adminErrorMessage(error));
@@ -85,16 +63,7 @@ function RoundsAdmin() {
 
   const declareChampion = async () => {
     try {
-      const { data: top3, error: loadError } = await supabase.from("players").select("id,ign").eq("status", "TOP_3");
-      if (loadError) throw loadError;
-      if (!top3 || top3.length === 0) return toast.error("No TOP_3 players to declare champion from");
-      const champ = top3[0];
-      const { data: player, error: playerError } = await supabase.from("players").update({ status: "CHAMPION" }).eq("id", champ.id).select("id").maybeSingle();
-      if (playerError) throw playerError;
-      requireRow(player, "Champion update");
-      const { data: settings, error: settingsError } = await supabase.from("settings").update({ event_status: "completed" }).eq("id", 1).select("id").maybeSingle();
-      if (settingsError) throw settingsError;
-      requireRow(settings, "Event completion update");
+      const champ = await adminRpc<{ ign: string }>("admin_declare_champion");
       toast.success(`${champ.ign} is the ARCTIXMC Champion!`);
     } catch (error) {
       toast.error(adminErrorMessage(error));
