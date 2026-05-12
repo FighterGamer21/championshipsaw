@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { Ban as BanIcon, Trash2 } from "lucide-react";
+import { adminErrorMessage, requireRow } from "@/lib/admin-db";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
@@ -36,21 +37,31 @@ function BansPage() {
 
   const submit = async () => {
     if (!ign.trim()) return toast.error("IGN required");
-    const banned_until = permanent ? null : new Date(Date.now() + days * 86400000).toISOString();
-    const { error } = await supabase.from("bans").insert({ ign: ign.trim(), discord_username: discord.trim() || null, reason, banned_until });
-    if (error) return toast.error(error.message);
-    // Also flag any matching player as BANNED
-    await supabase.from("players").update({ status: "BANNED" }).ilike("ign", ign.trim());
-    toast.success("Player banned");
-    setIgn(""); setDiscord(""); setReason("");
-    load();
+    try {
+      const banned_until = permanent ? null : new Date(Date.now() + days * 86400000).toISOString();
+      const { data, error } = await supabase.from("bans").insert({ ign: ign.trim(), discord_username: discord.trim() || null, reason, banned_until }).select("id").maybeSingle();
+      if (error) throw error;
+      requireRow(data, "Ban insert");
+      const { error: playerError } = await supabase.from("players").update({ status: "BANNED" }).ilike("ign", ign.trim());
+      if (playerError) throw playerError;
+      toast.success("Player banned");
+      setIgn(""); setDiscord(""); setReason("");
+      load();
+    } catch (error) {
+      toast.error(adminErrorMessage(error));
+    }
   };
 
   const unban = async (b: Ban) => {
-    const { error } = await supabase.from("bans").delete().eq("id", b.id);
-    if (error) return toast.error(error.message);
-    toast.success("Unbanned");
-    load();
+    try {
+      const { data, error } = await supabase.from("bans").delete().eq("id", b.id).select("id").maybeSingle();
+      if (error) throw error;
+      requireRow(data, "Unban");
+      toast.success("Unbanned");
+      load();
+    } catch (error) {
+      toast.error(adminErrorMessage(error));
+    }
   };
 
   return (

@@ -56,6 +56,8 @@ export function useRole() {
         setRoles(cachedRoles);
       }
 
+      await withTimeout(supabase.rpc("claim_role"), "Refreshing admin role");
+
       const { data, error: rolesError } = await withTimeout(
         supabase.from("user_roles").select("role").eq("user_id", uid),
         "Loading admin role",

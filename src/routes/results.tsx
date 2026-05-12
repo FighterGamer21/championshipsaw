@@ -34,6 +34,12 @@ function ResultsPage() {
       setElims((e ?? []) as Elimination[]);
     };
     load();
+    const ch = supabase
+      .channel("results-live-data")
+      .on("postgres_changes", { event: "*", schema: "public", table: "players" }, load)
+      .on("postgres_changes", { event: "*", schema: "public", table: "eliminations" }, load)
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
   }, []);
 
   const champion = players.find((p) => p.status === "CHAMPION");
