@@ -1,0 +1,13 @@
+import { Navbar } from "./Navbar";
+import { Footer } from "./Footer";
+import type { ReactNode } from "react";
+
+export function PageShell({ children }: { children: ReactNode }) {
+  return (
+    <div className="min-h-screen flex flex-col">
+      <Navbar />
+      <main className="flex-1">{children}</main>
+      <Footer />
+    </div>
+  );
+}
