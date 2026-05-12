@@ -34,7 +34,7 @@ function RoundsAdmin() {
 
   const startRound = async (day: number, name: string) => {
     try {
-      await adminRpc<Round>("admin_start_round", { _day: day, _round_name: name });
+      await adminRpc<Round>("admin_start_round_v2", { day, round_name: name });
       toast.success(`Started: ${name}`);
       load();
     } catch (error) {
@@ -44,7 +44,7 @@ function RoundsAdmin() {
 
   const endRound = async (name: string) => {
     try {
-      await adminRpc<Round>("admin_end_round", { _round_name: name });
+      await adminRpc<Round>("admin_end_round_v2", { round_name: name });
       toast.success(`Ended: ${name}`);
       load();
     } catch (error) {
@@ -54,7 +54,7 @@ function RoundsAdmin() {
 
   const selectTop3 = async () => {
     try {
-      const top3 = await adminRpc<{ ign: string }[]>("admin_select_top3");
+      const top3 = await adminRpc<{ ign: string }[]>("admin_select_top3_v2");
       toast.success(`Top 3 selected: ${top3.map((p) => p.ign).join(", ")}`);
     } catch (error) {
       toast.error(adminErrorMessage(error));
@@ -63,7 +63,7 @@ function RoundsAdmin() {
 
   const declareChampion = async () => {
     try {
-      const champ = await adminRpc<{ ign: string }>("admin_declare_champion");
+      const champ = await adminRpc<{ ign: string }>("admin_declare_champion_v2");
       toast.success(`${champ.ign} is the ARCTIXMC Champion!`);
     } catch (error) {
       toast.error(adminErrorMessage(error));

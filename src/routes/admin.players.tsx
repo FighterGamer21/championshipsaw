@@ -56,7 +56,7 @@ function PlayersPage() {
 
   const setStatus = async (p: Player, status: PlayerStatus, extra: Partial<Player> = {}) => {
     try {
-      const updated = await adminRpc<Player>("admin_set_player_status", setPlayerStatusArgs(p.id, status, extra));
+      const updated = await adminRpc<Player>("admin_set_player_status_v2", setPlayerStatusArgs(p.id, status, extra));
       setPlayers((list) => list.map((row) => (row.id === updated.id ? updated : row)));
       toast.success(`${p.ign} -> ${status}`);
       load();
@@ -67,7 +67,7 @@ function PlayersPage() {
 
   const delPlayer = async (p: Player) => {
     try {
-      await adminRpc<string>("admin_delete_player", { _player_id: p.id });
+      await adminRpc<string>("admin_delete_player_v2", { player_id: p.id });
       toast.success(`Deleted ${p.ign}`);
       load();
     } catch (error) {
@@ -77,7 +77,7 @@ function PlayersPage() {
 
   const banPlayer = async (p: Player) => {
     try {
-      await adminRpc<Player>("admin_ban_player", { _player_id: p.id });
+      await adminRpc<Player>("admin_ban_player_v2", { player_id: p.id });
       toast.success(`${p.ign} banned`);
       load();
     } catch (error) {

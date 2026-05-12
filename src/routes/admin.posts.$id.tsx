@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { ArrowLeft, Upload } from "lucide-react";
 import { POST_CATEGORIES, CATEGORY_LABELS, slugify, type PostCategory, type Post } from "@/lib/posts";
 import { adminErrorMessage, requireRow } from "@/lib/admin-db";
+import { adminRpc } from "@/lib/admin-rpc";
 
 export const Route = createFileRoute("/admin/posts/$id")({
   component: PostEditor,
@@ -58,19 +59,21 @@ function PostEditor() {
       is_published: !!post.is_published, is_featured: !!post.is_featured,
     };
     try {
-      if (isNew) {
-        const { data, error } = await supabase.from("posts").insert(payload).select("id").maybeSingle();
-        if (error) throw error;
-        const created = requireRow(data, "Post create");
-        toast.success("Post created");
-        nav({ to: "/admin/posts/$id", params: { id: created.id } });
-      } else {
-        const { data, error } = await supabase.from("posts").update(payload).eq("id", id).select("*").maybeSingle();
-        if (error) throw error;
-        const saved = requireRow(data as Post | null, "Post save");
-        setPost(saved);
-        toast.success("Saved");
-      }
+      const saved = await adminRpc<Post>("admin_save_post_v2", {
+        post_id: isNew ? null : id,
+        title: payload.title,
+        slug: payload.slug,
+        excerpt: payload.excerpt,
+        content: payload.content,
+        category: payload.category,
+        banner_url: payload.banner_url,
+        is_published: payload.is_published,
+        is_featured: payload.is_featured,
+      });
+      requireRow(saved, isNew ? "Post create" : "Post save");
+      setPost(saved);
+      toast.success(isNew ? "Post created" : "Saved");
+      if (isNew) nav({ to: "/admin/posts/$id", params: { id: saved.id } });
     } catch (error) {
       toast.error(adminErrorMessage(error));
     } finally {

@@ -20,9 +20,9 @@ export function setPlayerStatusArgs(
   extra: { current_day?: number; current_round?: string | null } = {},
 ) {
   return {
-    _player_id: playerId,
-    _status: status,
-    _current_day: extra.current_day ?? null,
-    _current_round: extra.current_round ?? null,
+    player_id: playerId,
+    status,
+    current_day: extra.current_day ?? null,
+    current_round: extra.current_round ?? null,
   };
 }
