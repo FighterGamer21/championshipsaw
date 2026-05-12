@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { Plus, Star, Eye, EyeOff, Trash2, Pencil } from "lucide-react";
 import type { Post } from "@/lib/posts";
 import { CATEGORY_LABELS, CATEGORY_STYLES } from "@/lib/posts";
+import { adminErrorMessage, requireRow } from "@/lib/admin-db";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
@@ -26,22 +27,39 @@ function PostsList() {
   useEffect(() => { load(); }, []);
 
   const togglePublish = async (p: Post) => {
-    const { error } = await supabase.from("posts").update({ is_published: !p.is_published }).eq("id", p.id);
-    if (error) return toast.error(error.message);
-    toast.success(p.is_published ? "Unpublished" : "Published");
-    load();
+    try {
+      const { data, error } = await supabase.from("posts").update({ is_published: !p.is_published }).eq("id", p.id).select("*").maybeSingle();
+      if (error) throw error;
+      const updated = requireRow(data as Post | null, "Post publish update");
+      setPosts((list) => list.map((row) => (row.id === updated.id ? updated : row)));
+      toast.success(p.is_published ? "Unpublished" : "Published");
+      load();
+    } catch (error) {
+      toast.error(adminErrorMessage(error));
+    }
   };
   const toggleFeatured = async (p: Post) => {
-    const { error } = await supabase.from("posts").update({ is_featured: !p.is_featured }).eq("id", p.id);
-    if (error) return toast.error(error.message);
-    toast.success(p.is_featured ? "Unfeatured" : "Featured");
-    load();
+    try {
+      const { data, error } = await supabase.from("posts").update({ is_featured: !p.is_featured }).eq("id", p.id).select("*").maybeSingle();
+      if (error) throw error;
+      const updated = requireRow(data as Post | null, "Post featured update");
+      setPosts((list) => list.map((row) => (row.id === updated.id ? updated : row)));
+      toast.success(p.is_featured ? "Unfeatured" : "Featured");
+      load();
+    } catch (error) {
+      toast.error(adminErrorMessage(error));
+    }
   };
   const del = async (p: Post) => {
-    const { error } = await supabase.from("posts").delete().eq("id", p.id);
-    if (error) return toast.error(error.message);
-    toast.success("Deleted");
-    load();
+    try {
+      const { data, error } = await supabase.from("posts").delete().eq("id", p.id).select("id").maybeSingle();
+      if (error) throw error;
+      requireRow(data, "Post delete");
+      toast.success("Deleted");
+      load();
+    } catch (error) {
+      toast.error(adminErrorMessage(error));
+    }
   };
 
   return (

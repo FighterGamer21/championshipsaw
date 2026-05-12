@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { ArrowLeft, Upload } from "lucide-react";
 import { POST_CATEGORIES, CATEGORY_LABELS, slugify, type PostCategory, type Post } from "@/lib/posts";
+import { adminErrorMessage, requireRow } from "@/lib/admin-db";
 
 export const Route = createFileRoute("/admin/posts/$id")({
   component: PostEditor,
@@ -56,17 +57,24 @@ function PostEditor() {
       category: post.category as PostCategory, banner_url: post.banner_url ?? null,
       is_published: !!post.is_published, is_featured: !!post.is_featured,
     };
-    if (isNew) {
-      const { data, error } = await supabase.from("posts").insert(payload).select("id").single();
+    try {
+      if (isNew) {
+        const { data, error } = await supabase.from("posts").insert(payload).select("id").maybeSingle();
+        if (error) throw error;
+        const created = requireRow(data, "Post create");
+        toast.success("Post created");
+        nav({ to: "/admin/posts/$id", params: { id: created.id } });
+      } else {
+        const { data, error } = await supabase.from("posts").update(payload).eq("id", id).select("*").maybeSingle();
+        if (error) throw error;
+        const saved = requireRow(data as Post | null, "Post save");
+        setPost(saved);
+        toast.success("Saved");
+      }
+    } catch (error) {
+      toast.error(adminErrorMessage(error));
+    } finally {
       setSaving(false);
-      if (error) return toast.error(error.message);
-      toast.success("Post created");
-      nav({ to: "/admin/posts/$id", params: { id: data.id } });
-    } else {
-      const { error } = await supabase.from("posts").update(payload).eq("id", id);
-      setSaving(false);
-      if (error) return toast.error(error.message);
-      toast.success("Saved");
     }
   };
 

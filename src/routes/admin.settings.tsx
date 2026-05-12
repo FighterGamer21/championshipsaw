@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { Copy, RefreshCw, AlertTriangle } from "lucide-react";
+import { adminErrorMessage, requireRow } from "@/lib/admin-db";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
@@ -48,10 +49,15 @@ function SettingsPage() {
   if (!s) return <AdminShell><div className="p-10 text-muted-foreground">Loading…</div></AdminShell>;
 
   const update = async (patch: Partial<Settings>) => {
-    const { error } = await supabase.from("settings").update(patch).eq("id", 1);
-    if (error) return toast.error(error.message);
-    setS({ ...s, ...patch });
-    toast.success("Saved");
+    try {
+      const { data, error } = await supabase.from("settings").update(patch).eq("id", 1).select("*").maybeSingle();
+      if (error) throw error;
+      const updated = requireRow(data as Settings | null, "Settings update");
+      setS(updated);
+      toast.success("Saved");
+    } catch (error) {
+      toast.error(adminErrorMessage(error));
+    }
   };
 
   const generateKey = () => {
@@ -62,16 +68,21 @@ function SettingsPage() {
   };
 
   const resetEvent = async () => {
-    const { error: eliminationsError } = await supabase.from("eliminations").delete().neq("id", "00000000-0000-0000-0000-000000000000");
-    if (eliminationsError) return toast.error(eliminationsError.message);
-    const { error: playersError } = await supabase.from("players").update({ status: "REGISTERED", current_day: 0, current_round: null, checked_in_at: null }).neq("id", "00000000-0000-0000-0000-000000000000");
-    if (playersError) return toast.error(playersError.message);
-    const { error: roundsError } = await supabase.from("rounds").delete().neq("id", "00000000-0000-0000-0000-000000000000");
-    if (roundsError) return toast.error(roundsError.message);
-    const { error: settingsError } = await supabase.from("settings").update({ current_day: 0, current_round: null, event_status: "upcoming" }).eq("id", 1);
-    if (settingsError) return toast.error(settingsError.message);
-    toast.success("Event reset");
-    load();
+    try {
+      const { error: eliminationsError } = await supabase.from("eliminations").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      if (eliminationsError) throw eliminationsError;
+      const { error: playersError } = await supabase.from("players").update({ status: "REGISTERED", current_day: 0, current_round: null, checked_in_at: null }).neq("id", "00000000-0000-0000-0000-000000000000");
+      if (playersError) throw playersError;
+      const { error: roundsError } = await supabase.from("rounds").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      if (roundsError) throw roundsError;
+      const { data: settings, error: settingsError } = await supabase.from("settings").update({ current_day: 0, current_round: null, event_status: "upcoming" }).eq("id", 1).select("*").maybeSingle();
+      if (settingsError) throw settingsError;
+      requireRow(settings, "Event reset settings update");
+      toast.success("Event reset");
+      load();
+    } catch (error) {
+      toast.error(adminErrorMessage(error));
+    }
   };
 
   return (

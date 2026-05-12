@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { Download, Search, Trash2 } from "lucide-react";
 import { downloadCSV } from "@/lib/csv";
 import { PLAYER_STATUSES, STATUS_STYLES, type PlayerStatus } from "@/lib/event";
+import { adminErrorMessage, requireRow } from "@/lib/admin-db";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
@@ -19,7 +20,7 @@ import {
 
 export const Route = createFileRoute("/admin/players")({
   component: PlayersPage,
-  head: () => ({ meta: [{ title: "Players — Admin" }, { name: "robots", content: "noindex" }] }),
+  head: () => ({ meta: [{ title: "Players - Admin" }, { name: "robots", content: "noindex" }] }),
 });
 
 type Player = {
@@ -53,25 +54,54 @@ function PlayersPage() {
   }, [players, q, filter]);
 
   const setStatus = async (p: Player, status: PlayerStatus, extra: Partial<Player> = {}) => {
-    const update: Partial<Player> = { status, ...extra };
-    if (status === "CHECKED_IN" && !p.checked_in_at) update.checked_in_at = new Date().toISOString();
-    const { error } = await supabase.from("players").update(update).eq("id", p.id);
-    if (error) return toast.error(error.message);
-    if (status === "ELIMINATED" || status === "DISQUALIFIED") {
-      const { error: eliminationError } = await supabase.from("eliminations").insert({
-        player_id: p.id, day: p.current_day || 1, round_name: p.current_round ?? "Unknown", reason: status === "DISQUALIFIED" ? "Disqualified" : "Eliminated",
-      });
-      if (eliminationError) return toast.error(eliminationError.message);
+    try {
+      const update: Partial<Player> = { status, ...extra };
+      if (status === "CHECKED_IN" && !p.checked_in_at) update.checked_in_at = new Date().toISOString();
+      const { data, error } = await supabase.from("players").update(update).eq("id", p.id).select("*").maybeSingle();
+      if (error) throw error;
+      const updated = requireRow(data as Player | null, "Player status update");
+
+      if (status === "ELIMINATED" || status === "DISQUALIFIED") {
+        const { data: elimination, error: eliminationError } = await supabase.from("eliminations").insert({
+          player_id: p.id, day: updated.current_day || 1, round_name: updated.current_round ?? "Unknown", reason: status === "DISQUALIFIED" ? "Disqualified" : "Eliminated",
+        }).select("id").maybeSingle();
+        if (eliminationError) throw eliminationError;
+        requireRow(elimination, "Elimination history insert");
+      }
+
+      setPlayers((list) => list.map((row) => (row.id === updated.id ? updated : row)));
+      toast.success(`${p.ign} -> ${status}`);
+      load();
+    } catch (error) {
+      toast.error(adminErrorMessage(error));
     }
-    toast.success(`${p.ign} → ${status}`);
-    load();
   };
 
   const delPlayer = async (p: Player) => {
-    const { error } = await supabase.from("players").delete().eq("id", p.id);
-    if (error) return toast.error(error.message);
-    toast.success(`Deleted ${p.ign}`);
-    load();
+    try {
+      const { data, error } = await supabase.from("players").delete().eq("id", p.id).select("id").maybeSingle();
+      if (error) throw error;
+      requireRow(data, "Player delete");
+      toast.success(`Deleted ${p.ign}`);
+      load();
+    } catch (error) {
+      toast.error(adminErrorMessage(error));
+    }
+  };
+
+  const banPlayer = async (p: Player) => {
+    try {
+      const { data: ban, error } = await supabase.from("bans").insert({ ign: p.ign, discord_username: p.discord_username || null, reason: "Banned by admin", banned_until: null }).select("id").maybeSingle();
+      if (error) throw error;
+      requireRow(ban, "Ban insert");
+      const { data: updated, error: playerError } = await supabase.from("players").update({ status: "BANNED" }).eq("id", p.id).select("*").maybeSingle();
+      if (playerError) throw playerError;
+      requireRow(updated, "Player ban status update");
+      toast.success(`${p.ign} banned`);
+      load();
+    } catch (error) {
+      toast.error(adminErrorMessage(error));
+    }
   };
 
   const exportCSV = () => {
@@ -133,8 +163,8 @@ function PlayersPage() {
                     <td className="px-4 py-3">{p.timezone}</td>
                     <td className="px-4 py-3">{p.can_attend_all_days ? "Yes" : "No"}</td>
                     <td className="px-4 py-3"><span className={`text-[10px] tracking-wider px-2 py-0.5 rounded border ${STATUS_STYLES[p.status]}`}>{p.status}</span></td>
-                    <td className="px-4 py-3">{p.current_day || "—"}</td>
-                    <td className="px-4 py-3 text-muted-foreground">{p.current_round ?? "—"}</td>
+                    <td className="px-4 py-3">{p.current_day || "-"}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{p.current_round ?? "-"}</td>
                     <td className="px-4 py-3 text-right">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild><Button size="sm" variant="outline" className="border-cyan">Actions</Button></DropdownMenuTrigger>
@@ -146,19 +176,12 @@ function PlayersPage() {
                           <DropdownMenuItem onClick={() => setStatus(p, "SEMI_FINALIST")}>Mark Semi-Finalist</DropdownMenuItem>
                           <DropdownMenuItem onClick={() => setStatus(p, "FINALIST")}>Mark Finalist</DropdownMenuItem>
                           <DropdownMenuItem onClick={() => setStatus(p, "TOP_3")}>Mark Top 3</DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => setStatus(p, "CHAMPION")} className="text-yellow-300">Mark Champion 👑</DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => setStatus(p, "CHAMPION")} className="text-yellow-300">Mark Champion</DropdownMenuItem>
                           <DropdownMenuItem onClick={() => setStatus(p, "SPECTATOR")}>Mark Spectator</DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <EliminateAction onConfirm={() => setStatus(p, "ELIMINATED")} ign={p.ign} />
                           <DropdownMenuItem onClick={() => setStatus(p, "DISQUALIFIED")} className="text-rose-400">Reject / Disqualify</DropdownMenuItem>
-                          <DropdownMenuItem onClick={async () => {
-                            const { error } = await supabase.from("bans").insert({ ign: p.ign, discord_username: p.discord_username || null, reason: "Banned by admin", banned_until: null });
-                            if (error) return toast.error(error.message);
-                            const { error: playerError } = await supabase.from("players").update({ status: "BANNED" }).eq("id", p.id);
-                            if (playerError) return toast.error(playerError.message);
-                            toast.success(`${p.ign} banned`);
-                            load();
-                          }} className="text-rose-400">Ban Player</DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => banPlayer(p)} className="text-rose-400">Ban Player</DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
