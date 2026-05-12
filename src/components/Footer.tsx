@@ -6,8 +6,15 @@ import { MessageCircle, Store } from "lucide-react";
 export function Footer() {
   const [s, setS] = useState<{ footer_text: string; discord_link: string | null; store_link: string | null } | null>(null);
   useEffect(() => {
-    supabase.from("settings").select("footer_text,discord_link,store_link").eq("id", 1).maybeSingle()
-      .then(({ data }) => data && setS(data));
+    const load = () => {
+      supabase.from("settings").select("footer_text,discord_link,store_link").eq("id", 1).maybeSingle()
+        .then(({ data }) => data && setS(data));
+    };
+    load();
+    const ch = supabase.channel("footer-settings")
+      .on("postgres_changes", { event: "*", schema: "public", table: "settings" }, load)
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
   }, []);
   return (
     <footer className="border-t border-cyan/15 mt-24">

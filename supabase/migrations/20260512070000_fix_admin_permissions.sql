@@ -27,3 +27,8 @@ CREATE POLICY "Admins update settings" ON public.settings FOR UPDATE TO authenti
   WITH CHECK (public.is_admin_or_owner(auth.uid()));
 CREATE POLICY "Admins insert settings" ON public.settings FOR INSERT TO authenticated
   WITH CHECK (public.is_admin_or_owner(auth.uid()));
+
+DO $$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE public.posts;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;

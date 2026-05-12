@@ -50,16 +50,29 @@ function LandingPage() {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    supabase.from("settings").select("*").eq("id", 1).maybeSingle().then(({ data }) => data && setSettings(data as Settings));
-    supabase.from("players").select("ign,status").in("status", ["CHAMPION", "TOP_3"]).then(({ data }) => {
-      const c = data?.find((p) => p.status === "CHAMPION");
+    const load = async () => {
+      const [settingsRes, playersRes, postsRes, featuredRes] = await Promise.all([
+        supabase.from("settings").select("*").eq("id", 1).maybeSingle(),
+        supabase.from("players").select("ign,status").in("status", ["CHAMPION", "TOP_3"]),
+        supabase.from("posts").select("*").eq("is_published", true).order("created_at", { ascending: false }).limit(6),
+        supabase.from("posts").select("*").eq("is_published", true).eq("is_featured", true).order("created_at", { ascending: false }).limit(1).maybeSingle(),
+      ]);
+
+      if (settingsRes.data) setSettings(settingsRes.data as Settings);
+      const c = playersRes.data?.find((p) => p.status === "CHAMPION");
       setChampion(c?.ign ?? null);
-      setTop3(data?.filter((p) => p.status === "TOP_3").map((p) => p.ign) ?? []);
-    });
-    supabase.from("posts").select("*").eq("is_published", true).order("created_at", { ascending: false }).limit(6)
-      .then(({ data }) => setPosts((data ?? []) as Post[]));
-    supabase.from("posts").select("*").eq("is_published", true).eq("is_featured", true).order("created_at", { ascending: false }).limit(1).maybeSingle()
-      .then(({ data }) => data && setFeatured(data as Post));
+      setTop3(playersRes.data?.filter((p) => p.status === "TOP_3").map((p) => p.ign) ?? []);
+      setPosts((postsRes.data ?? []) as Post[]);
+      setFeatured((featuredRes.data ?? null) as Post | null);
+    };
+
+    load();
+    const ch = supabase.channel("home-live-data")
+      .on("postgres_changes", { event: "*", schema: "public", table: "settings" }, load)
+      .on("postgres_changes", { event: "*", schema: "public", table: "players" }, load)
+      .on("postgres_changes", { event: "*", schema: "public", table: "posts" }, load)
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
   }, []);
 
   const cd = useCountdown(settings?.event_start_at ? new Date(settings.event_start_at) : null);

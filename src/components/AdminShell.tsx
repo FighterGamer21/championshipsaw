@@ -19,16 +19,35 @@ const allLinks: Link[] = [
 ];
 
 export function AdminShell({ children }: { children: ReactNode }) {
-  const { loading, userId, isOwner, isAdmin, isModerator } = useRole();
+  const { loading, error, userId, isOwner, isAdmin, isModerator, refresh } = useRole();
   const nav = useNavigate();
   const path = useRouterState({ select: (s) => s.location.pathname });
 
   useEffect(() => {
-    if (!loading && (!userId || !isModerator)) nav({ to: "/admin/login" });
-  }, [loading, userId, isModerator, nav]);
+    if (!loading && !error && (!userId || !isModerator)) nav({ to: "/admin/login" });
+  }, [loading, error, userId, isModerator, nav]);
 
-  if (loading || !isModerator) {
+  if (loading) {
     return <div className="min-h-screen flex items-center justify-center text-muted-foreground">Loading admin...</div>;
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-4">
+        <div className="glass-strong rounded-2xl p-6 max-w-md text-center">
+          <div className="font-display text-xl">Admin session problem</div>
+          <p className="mt-2 text-sm text-muted-foreground">{error}</p>
+          <div className="mt-4 flex justify-center gap-2">
+            <Button onClick={refresh} className="bg-[#00d4ff] text-[#07111f] hover:bg-[#00d4ff]/90">Try Again</Button>
+            <Button onClick={() => nav({ to: "/admin/login" })} variant="outline" className="border-cyan">Sign In</Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isModerator) {
+    return <div className="min-h-screen flex items-center justify-center text-muted-foreground">Redirecting to admin login...</div>;
   }
 
   const links = allLinks.filter((l) =>

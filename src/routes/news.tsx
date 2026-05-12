@@ -19,8 +19,15 @@ export const Route = createFileRoute("/news")({
 function NewsList() {
   const [posts, setPosts] = useState<Post[]>([]);
   useEffect(() => {
-    supabase.from("posts").select("*").eq("is_published", true).order("created_at", { ascending: false })
-      .then(({ data }) => setPosts((data ?? []) as Post[]));
+    const load = () => {
+      supabase.from("posts").select("*").eq("is_published", true).order("created_at", { ascending: false })
+        .then(({ data }) => setPosts((data ?? []) as Post[]));
+    };
+    load();
+    const ch = supabase.channel("news-posts")
+      .on("postgres_changes", { event: "*", schema: "public", table: "posts" }, load)
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
   }, []);
   return (
     <PageShell>
